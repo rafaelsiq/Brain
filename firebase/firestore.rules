@@ -1,0 +1,100 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function memberDocId(groupId) {
+      return groupId + '_' + request.auth.uid;
+    }
+
+    function groupMember(groupId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/members/$(memberDocId(groupId)));
+    }
+
+    function groupAdmin(groupId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/members/$(memberDocId(groupId))).data.role == 'admin';
+    }
+
+    match /profiles/{userId} {
+      allow read: if signedIn();
+      allow create, update: if isSelf(userId);
+      allow delete: if isSelf(userId);
+    }
+
+    match /inviteCodes/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    match /groups/{groupId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if groupAdmin(groupId);
+    }
+
+    match /members/{memberId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && memberId == request.resource.data.groupId + '_' + request.auth.uid;
+      allow update, delete: if signedIn() && (
+        resource.data.userId == request.auth.uid
+        || groupAdmin(resource.data.groupId)
+      );
+    }
+
+    match /songs/{songId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && groupMember(request.resource.data.groupId);
+      allow update, delete: if signedIn() && (
+        resource.data.createdBy == request.auth.uid
+        || groupAdmin(resource.data.groupId)
+      );
+    }
+
+    match /participants/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /stanzas/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /slots/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /proposals/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.authorId == request.auth.uid;
+    }
+
+    match /votes/{id} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /sessions/{id} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /audioTakes/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}
