@@ -22,18 +22,31 @@ export function RegisterPage() {
   }
 
   return (
-    <Page title="Criar conta" backTo="/welcome" narrow>
+    <Page title="Criar conta" backTo="/welcome" narrow centerContent>
       <form className="stack" onSubmit={onSubmit}>
         {error && <div className="error">{error}</div>}
         <div className="field">
           <label htmlFor="name">Nome</label>
-          <input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+          <input
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="name"
+            autoCapitalize="words"
+            enterKeyHint="next"
+            placeholder="Seu nome"
+            required
+          />
         </div>
         <div className="field">
           <label htmlFor="email">E-mail</label>
           <input
             id="email"
             type="email"
+            autoComplete="email"
+            inputMode="email"
+            enterKeyHint="next"
+            placeholder="nome@email.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -44,6 +57,9 @@ export function RegisterPage() {
           <input
             id="password"
             type="password"
+            autoComplete="new-password"
+            enterKeyHint="done"
+            placeholder="Mínimo 4 caracteres"
             minLength={4}
             value={password}
             onChange={(e) => setPassword(e.target.value)}

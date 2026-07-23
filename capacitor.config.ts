@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
   appId: 'app.brain.music',
-  appName: 'Brain',
+  appName: 'Collabrain',
   webDir: 'dist',
   server: {
     androidScheme: 'https',
@@ -16,6 +16,10 @@ const config: CapacitorConfig = {
     StatusBar: {
       style: 'LIGHT',
       backgroundColor: '#f7f8fa',
+    },
+    Keyboard: {
+      resize: 'body',
+      resizeOnFullScreen: true,
     },
   },
 }

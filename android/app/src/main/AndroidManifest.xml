@@ -15,11 +15,29 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Custom scheme: brain://join/CODE -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="brain" android:host="join" android:pathPrefix="/" />
+            </intent-filter>
+
+            <!-- HTTPS App Links (verify with Digital Asset Links on deploy) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="collabrain-5ecf7.web.app" android:pathPrefix="/join" />
+                <data android:scheme="https" android:host="collabrain-5ecf7.firebaseapp.com" android:pathPrefix="/join" />
             </intent-filter>
 
         </activity>

@@ -455,6 +455,10 @@ export function SongEditorPage() {
               }}
               required
               placeholder="Escreva o verso…"
+              autoCapitalize="sentences"
+              autoComplete="off"
+              spellCheck
+              enterKeyHint="done"
             />
             {sameAsBase && (
               <p className="muted text-xs" style={{ color: 'var(--danger-text)' }}>

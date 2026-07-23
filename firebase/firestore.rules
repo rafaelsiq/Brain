@@ -24,6 +24,17 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/members/$(memberDocId(groupId))).data.role == 'admin';
     }
 
+    function groupCreator(groupId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid;
+    }
+
+    function isGroupCreatorMember() {
+      return exists(/databases/$(database)/documents/groups/$(resource.data.groupId))
+        && get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.createdBy
+          == resource.data.userId;
+    }
+
     match /profiles/{userId} {
       allow read: if signedIn();
       allow create, update: if isSelf(userId);
@@ -39,7 +50,8 @@ service cloud.firestore {
     match /groups/{groupId} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if groupAdmin(groupId);
+      allow update: if groupAdmin(groupId);
+      allow delete: if groupCreator(groupId);
     }
 
     match /members/{memberId} {
@@ -47,9 +59,36 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid
         && memberId == request.resource.data.groupId + '_' + request.auth.uid;
-      allow update, delete: if signedIn() && (
+
+      // Self may leave (delete own membership) unless they are the group creator.
+      // Admins may remove others, but never the creator.
+      allow delete: if signedIn() && !isGroupCreatorMember() && (
         resource.data.userId == request.auth.uid
         || groupAdmin(resource.data.groupId)
+      );
+
+      // Self may update own color; admins may update others' role/color,
+      // but never change the creator's role.
+      allow update: if signedIn() && (
+        (
+          resource.data.userId == request.auth.uid
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.groupId == resource.data.groupId
+        )
+        || (
+          groupAdmin(resource.data.groupId)
+          && !isGroupCreatorMember()
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.groupId == resource.data.groupId
+        )
+        || (
+          groupAdmin(resource.data.groupId)
+          && isGroupCreatorMember()
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.groupId == resource.data.groupId
+        )
       );
     }
 

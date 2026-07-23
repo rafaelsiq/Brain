@@ -1,4 +1,4 @@
-# Brain
+# Collabrain
 
 App de brainstorm musical colaborativo (Vite + React + PWA + Capacitor).
 
@@ -35,6 +35,8 @@ Artefatos gerados:
 - AAB release: `android/app/build/outputs/bundle/release/app-release.aab`
 
 Permissão de microfone: `RECORD_AUDIO` em `android/app/src/main/AndroidManifest.xml`.
+
+Convites abrem via `/join/:code` (web/PWA) e deep links Android (`https://…/join/CODE` + `brain://join/CODE`). Para App Links verificados na Play Store, publique Digital Asset Links em `/.well-known/assetlinks.json` apontando para o package `app.brain.music`.
 
 Keystore de desenvolvimento: ver `android/KEYSTORE.md`. Não versionar `*.keystore` nem `key.properties`.
 

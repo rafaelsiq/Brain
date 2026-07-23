@@ -14,8 +14,8 @@ export default defineConfig({
       },
       includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
-        name: 'Brain — Brainstorm Musical',
-        short_name: 'Brain',
+        name: 'Collabrain — Brainstorm Musical',
+        short_name: 'Collabrain',
         description: 'Criação colaborativa de música em grupo',
         theme_color: '#f7f8fa',
         background_color: '#f7f8fa',

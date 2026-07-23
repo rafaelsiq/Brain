@@ -1,5 +1,5 @@
 {
-  "name": "brain",
+  "name": "collabrain",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -16,6 +16,7 @@
     "@capacitor/android": "^7.4.2",
     "@capacitor/app": "^7.0.1",
     "@capacitor/core": "^7.4.2",
+    "@capacitor/keyboard": "^7.0.6",
     "@capacitor/splash-screen": "^7.0.1",
     "@capacitor/status-bar": "^7.0.1",
     "firebase": "^12.16.0",

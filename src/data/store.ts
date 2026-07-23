@@ -11,11 +11,14 @@ import {
 } from '@/data/persist'
 import {
   fbAcceptProposal,
+  fbAddSongParticipant,
   fbAddStanza,
   fbAppendVerse,
   fbCastVote,
+  fbChangePassword,
   fbCreateGroup,
   fbCreateSong,
+  fbDeleteAccount,
   fbDeleteGroup,
   fbDeleteSong,
   fbDeleteStanza,
@@ -27,6 +30,7 @@ import {
   fbProposeVerse,
   fbRegister,
   fbRemoveMember,
+  fbRemoveSongParticipant,
   fbRemoveVote,
   fbSaveAudioTake,
   fbSetMemberColor,
@@ -36,16 +40,19 @@ import {
   fbUpdateProfile,
   fbUpdateSong,
   fbUpdateStanza,
+  fbUploadAvatar,
   usingFirebase,
 } from '@/data/firebaseRepo'
 import type {
   AppState,
   AudioTake,
   Group,
+  GroupMember,
   GroupRole,
   LineSlot,
   Profile,
   Song,
+  SongParticipant,
   SongVisibility,
   Stanza,
   TextSegment,
@@ -150,6 +157,7 @@ export function mergeSongRemote(songId: string, partial: Partial<AppState>): voi
   const remoteVotes = partial.votes ?? []
   const remoteSessions = partial.sessions ?? []
   const remoteAudio = partial.audioTakes ?? []
+  const remoteParticipants = partial.participants
 
   const stanzasForLookup = [
     ...state.stanzas.filter((s) => s.songId !== songId),
@@ -201,6 +209,14 @@ export function mergeSongRemote(songId: string, partial: Partial<AppState>): voi
       }),
       ...remoteAudio,
     ]),
+    ...(remoteParticipants
+      ? {
+          participants: dedupeById([
+            ...state.participants.filter((p) => p.songId !== songId),
+            ...remoteParticipants,
+          ]),
+        }
+      : {}),
   })
 }
 
@@ -286,7 +302,42 @@ export async function updateProfile(
   return updated
 }
 
-export function deleteAccount(userId: string): void {
+export async function uploadAvatar(userId: string, dataUrl: string): Promise<Profile> {
+  if (usingFirebase) {
+    const updated = await fbUploadAvatar(userId, dataUrl)
+    setState({
+      profiles: state.profiles.map((p) => (p.id === userId ? updated : p)),
+    })
+    return updated
+  }
+  return updateProfile(userId, { avatarUrl: dataUrl })
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  if (usingFirebase) {
+    await fbChangePassword(currentPassword, newPassword)
+    return
+  }
+  const userId = state.currentUserId
+  if (!userId) throw new Error('Sessão inválida')
+  const acc = state.accounts.find((a) => a.profileId === userId)
+  if (!acc || acc.password !== currentPassword) {
+    throw new Error('Senha atual incorreta')
+  }
+  if (newPassword.length < 6) {
+    throw new Error('A nova senha deve ter pelo menos 6 caracteres')
+  }
+  setState({
+    accounts: state.accounts.map((a) =>
+      a.profileId === userId ? { ...a, password: newPassword } : a,
+    ),
+  })
+}
+
+function wipeLocalAccount(userId: string): void {
   setState({
     ...emptyState(),
     accounts: state.accounts.filter((a) => a.profileId !== userId),
@@ -305,9 +356,38 @@ export function deleteAccount(userId: string): void {
   })
 }
 
+export async function deleteAccount(userId: string, password: string): Promise<void> {
+  if (usingFirebase) {
+    await fbDeleteAccount(userId, password)
+    applyRemoteState({ ...emptyState(), currentUserId: null })
+    return
+  }
+  const acc = state.accounts.find((a) => a.profileId === userId)
+  if (!acc || acc.password !== password) {
+    throw new Error('Senha incorreta')
+  }
+  wipeLocalAccount(userId)
+}
+
 export function currentProfile(): Profile | null {
   if (!state.currentUserId) return null
   return state.profiles.find((p) => p.id === state.currentUserId) ?? null
+}
+
+export function profileActivityStats(userId: string): {
+  groups: number
+  songs: number
+  takes: number
+} {
+  const groups = groupsForUser(userId).length
+  const songIds = new Set(
+    state.participants.filter((p) => p.userId === userId).map((p) => p.songId),
+  )
+  const songs = state.songs.filter(
+    (s) => s.createdBy === userId || songIds.has(s.id),
+  ).length
+  const takes = state.audioTakes.filter((a) => a.userId === userId).length
+  return { groups, songs, takes }
 }
 
 // ——— Groups ———
@@ -366,7 +446,12 @@ export async function updateGroup(
   return g
 }
 
-export async function deleteGroup(groupId: string): Promise<void> {
+export async function deleteGroup(groupId: string, actorId: string): Promise<void> {
+  const group = state.groups.find((g) => g.id === groupId)
+  if (!group) throw new Error('Grupo não encontrado')
+  if (group.createdBy !== actorId) {
+    throw new Error('Só o criador pode excluir o grupo')
+  }
   if (usingFirebase) await fbDeleteGroup(groupId)
   const songIds = state.songs.filter((s) => s.groupId === groupId).map((s) => s.id)
   const stanzaIds = state.stanzas.filter((s) => songIds.includes(s.songId)).map((s) => s.id)
@@ -421,7 +506,19 @@ export async function joinGroupByCode(inviteCode: string, userId: string): Promi
   return group
 }
 
+function assertNotGroupCreator(memberId: string, action: string): GroupMember {
+  const member = state.members.find((m) => m.id === memberId)
+  if (!member) throw new Error('Membro não encontrado')
+  const group = state.groups.find((g) => g.id === member.groupId)
+  if (!group) throw new Error('Grupo não encontrado')
+  if (group.createdBy === member.userId) {
+    throw new Error(`Não é possível ${action} o criador do grupo`)
+  }
+  return member
+}
+
 export async function setMemberRole(memberId: string, role: GroupRole): Promise<void> {
+  assertNotGroupCreator(memberId, 'alterar o papel de')
   if (usingFirebase) await fbSetMemberRole(memberId, role)
   setState({
     members: state.members.map((m) => (m.id === memberId ? { ...m, role } : m)),
@@ -429,13 +526,30 @@ export async function setMemberRole(memberId: string, role: GroupRole): Promise<
 }
 
 export async function removeMember(memberId: string): Promise<void> {
+  assertNotGroupCreator(memberId, 'remover')
   if (usingFirebase) await fbRemoveMember(memberId)
   setState({ members: state.members.filter((m) => m.id !== memberId) })
+}
+
+export async function leaveGroup(groupId: string, userId: string): Promise<void> {
+  const group = state.groups.find((g) => g.id === groupId)
+  if (!group) throw new Error('Grupo não encontrado')
+  if (group.createdBy === userId) {
+    throw new Error('O criador não pode sair do grupo. Exclua o grupo se quiser encerrá-lo.')
+  }
+  const member = state.members.find((m) => m.groupId === groupId && m.userId === userId)
+  if (!member) throw new Error('Você não é membro deste grupo')
+  if (usingFirebase) await fbRemoveMember(member.id)
+  setState({ members: state.members.filter((m) => m.id !== member.id) })
 }
 
 export function groupsForUser(userId: string): Group[] {
   const ids = new Set(state.members.filter((m) => m.userId === userId).map((m) => m.groupId))
   return state.groups.filter((g) => ids.has(g.id))
+}
+
+export function isGroupCreator(groupId: string, userId: string): boolean {
+  return state.groups.some((g) => g.id === groupId && g.createdBy === userId)
 }
 
 export function isGroupAdmin(groupId: string, userId: string): boolean {
@@ -529,7 +643,7 @@ export async function createSong(input: {
   const participants =
     input.visibility === 'private'
       ? Array.from(new Set([input.createdBy, ...(input.participantIds ?? [])])).map((userId) => ({
-          id: createId('prt'),
+          id: `${song.id}_${userId}`,
           songId: song.id,
           userId,
         }))
@@ -548,14 +662,65 @@ export async function updateSong(
   songId: string,
   patch: Partial<Pick<Song, 'title' | 'visibility' | 'key' | 'bpm'>>,
 ): Promise<Song> {
+  const current = state.songs.find((s) => s.id === songId)
+  if (!current) throw new Error('Música não encontrada')
+
   if (usingFirebase) await fbUpdateSong(songId, patch)
   const songs = state.songs.map((s) =>
     s.id === songId ? { ...s, ...patch, updatedAt: nowIso() } : s,
   )
-  setState({ songs })
+  let participants = state.participants
+  const nextVisibility = patch.visibility ?? current.visibility
+  if (nextVisibility === 'private') {
+    const hasCreator = participants.some(
+      (p) => p.songId === songId && p.userId === current.createdBy,
+    )
+    if (!hasCreator) {
+      const creatorPart: SongParticipant = {
+        id: `${songId}_${current.createdBy}`,
+        songId,
+        userId: current.createdBy,
+      }
+      if (usingFirebase) await fbAddSongParticipant(songId, current.createdBy)
+      participants = [...participants, creatorPart]
+    }
+  }
+  setState({ songs, participants })
   const song = songs.find((s) => s.id === songId)
   if (!song) throw new Error('Música não encontrada')
   return song
+}
+
+export async function addSongParticipant(songId: string, userId: string): Promise<SongParticipant> {
+  const song = state.songs.find((s) => s.id === songId)
+  if (!song) throw new Error('Música não encontrada')
+  if (song.visibility !== 'private') {
+    throw new Error('Só músicas privadas têm lista de participantes')
+  }
+  if (!isGroupMember(song.groupId, userId)) {
+    throw new Error('A pessoa precisa ser membro do grupo')
+  }
+  if (state.participants.some((p) => p.songId === songId && p.userId === userId)) {
+    const existing = state.participants.find((p) => p.songId === songId && p.userId === userId)!
+    return existing
+  }
+  const participant = usingFirebase
+    ? await fbAddSongParticipant(songId, userId)
+    : { id: `${songId}_${userId}`, songId, userId }
+  setState({ participants: [...state.participants, participant] })
+  return participant
+}
+
+export async function removeSongParticipant(songId: string, userId: string): Promise<void> {
+  const song = state.songs.find((s) => s.id === songId)
+  if (!song) throw new Error('Música não encontrada')
+  if (song.createdBy === userId) {
+    throw new Error('Não é possível remover o criador da música')
+  }
+  const participant = state.participants.find((p) => p.songId === songId && p.userId === userId)
+  if (!participant) return
+  if (usingFirebase) await fbRemoveSongParticipant(participant.id)
+  setState({ participants: state.participants.filter((p) => p.id !== participant.id) })
 }
 
 export async function deleteSong(songId: string): Promise<void> {
@@ -580,6 +745,7 @@ export function canAccessSong(songId: string, userId: string): boolean {
   if (!song) return false
   if (!isGroupMember(song.groupId, userId)) return false
   if (song.visibility === 'public_in_group') return true
+  if (song.createdBy === userId) return true
   return state.participants.some((p) => p.songId === songId && p.userId === userId)
 }
 

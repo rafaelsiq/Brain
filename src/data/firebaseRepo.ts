@@ -1,8 +1,12 @@
 import {
+  EmailAuthProvider,
   createUserWithEmailAndPassword,
+  deleteUser,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   signInWithEmailAndPassword,
   signOut,
+  updatePassword,
   updateProfile as updateAuthProfile,
   type User,
 } from 'firebase/auth'
@@ -19,9 +23,10 @@ import {
   where,
   writeBatch,
   deleteField,
+  type DocumentReference,
   type Unsubscribe,
 } from 'firebase/firestore'
-import { getDownloadURL, ref, uploadString } from 'firebase/storage'
+import { deleteObject, getDownloadURL, ref, uploadString } from 'firebase/storage'
 import { firebaseAuth, firebaseStorage, firestore, usingFirebase } from '@/lib/firebase'
 import { createId, makeInviteCode, nowIso } from '@/data/persist'
 import { pickUniqueGroupColor } from '@/lib/color'
@@ -139,10 +144,118 @@ export async function fbUpdateProfile(
     updatedAt: nowIso(),
   }
   await updateDoc(refProfile, clean(next))
-  if (patch.name && auth().currentUser) {
-    await updateAuthProfile(auth().currentUser!, { displayName: patch.name })
+  const user = auth().currentUser
+  if (user && user.uid === userId) {
+    const authPatch: { displayName?: string; photoURL?: string } = {}
+    if (patch.name) authPatch.displayName = patch.name
+    if (patch.avatarUrl) authPatch.photoURL = patch.avatarUrl
+    if (Object.keys(authPatch).length) await updateAuthProfile(user, authPatch)
   }
   return mapProfile(userId, next as Record<string, unknown>)
+}
+
+async function reauthWithPassword(password: string): Promise<User> {
+  const user = auth().currentUser
+  if (!user?.email) throw new Error('Sessão inválida. Entre novamente.')
+  const credential = EmailAuthProvider.credential(user.email, password)
+  try {
+    await reauthenticateWithCredential(user, credential)
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
+    if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+      throw new Error('Senha incorreta')
+    }
+    if (code === 'auth/too-many-requests') {
+      throw new Error('Muitas tentativas. Tente novamente em instantes.')
+    }
+    throw err instanceof Error ? err : new Error('Falha na autenticação')
+  }
+  return user
+}
+
+export async function fbChangePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  if (newPassword.length < 6) {
+    throw new Error('A nova senha deve ter pelo menos 6 caracteres')
+  }
+  const user = await reauthWithPassword(currentPassword)
+  try {
+    await updatePassword(user, newPassword)
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
+    if (code === 'auth/weak-password') {
+      throw new Error('A nova senha é muito fraca')
+    }
+    throw err instanceof Error ? err : new Error('Não foi possível alterar a senha')
+  }
+}
+
+export async function fbUploadAvatar(userId: string, dataUrl: string): Promise<Profile> {
+  const path = `avatars/${userId}/avatar`
+  const storageRef = ref(storage(), path)
+  await uploadString(storageRef, dataUrl, 'data_url')
+  const url = await getDownloadURL(storageRef)
+  return fbUpdateProfile(userId, { avatarUrl: url })
+}
+
+async function deleteDocsByQuery(
+  collectionName: string,
+  field: string,
+  value: string,
+): Promise<void> {
+  const snaps = await getDocs(query(collection(db(), collectionName), where(field, '==', value)))
+  await commitDeletes(snaps.docs.map((d) => d.ref))
+}
+
+async function commitDeletes(refs: DocumentReference[]): Promise<void> {
+  const chunk = 400
+  for (let i = 0; i < refs.length; i += chunk) {
+    const batch = writeBatch(db())
+    refs.slice(i, i + chunk).forEach((r) => batch.delete(r))
+    await batch.commit()
+  }
+}
+
+export async function fbDeleteAccount(userId: string, password: string): Promise<void> {
+  const user = await reauthWithPassword(password)
+  if (user.uid !== userId) throw new Error('Usuário não corresponde à sessão')
+
+  const memberSnaps = await getDocs(
+    query(collection(db(), 'members'), where('userId', '==', userId)),
+  )
+  const groupIds = [...new Set(memberSnaps.docs.map((d) => String(d.data().groupId)))]
+
+  for (const groupId of groupIds) {
+    const allMembers = await getDocs(
+      query(collection(db(), 'members'), where('groupId', '==', groupId)),
+    )
+    if (allMembers.size <= 1) {
+      await fbDeleteGroup(groupId)
+    } else {
+      const mine = allMembers.docs.find((d) => String(d.data().userId) === userId)
+      if (mine) await deleteDoc(mine.ref)
+    }
+  }
+
+  await Promise.all([
+    deleteDocsByQuery('proposals', 'authorId', userId),
+    deleteDocsByQuery('votes', 'userId', userId),
+    deleteDocsByQuery('sessions', 'userId', userId),
+    deleteDocsByQuery('audioTakes', 'userId', userId),
+    deleteDocsByQuery('participants', 'userId', userId),
+  ])
+
+  await deleteDoc(doc(db(), 'profiles', userId))
+
+  try {
+    await deleteObject(ref(storage(), `avatars/${userId}/avatar`))
+  } catch {
+    // Avatar may not exist
+  }
+
+  await deleteUser(user)
 }
 
 export async function fbLoadUserUniverse(userId: string): Promise<Partial<AppState>> {
@@ -400,7 +513,7 @@ export async function fbCreateSong(input: {
   const participants: SongParticipant[] =
     input.visibility === 'private'
       ? Array.from(new Set([input.createdBy, ...(input.participantIds ?? [])])).map((userId) => ({
-          id: createId('prt'),
+          id: `${songId}_${userId}`,
           songId,
           userId,
         }))
@@ -416,6 +529,23 @@ export async function fbUpdateSong(
   patch: Partial<Pick<Song, 'title' | 'visibility' | 'key' | 'bpm'>>,
 ): Promise<void> {
   await updateDoc(doc(db(), 'songs', songId), clean({ ...patch, updatedAt: nowIso() }))
+}
+
+export async function fbAddSongParticipant(
+  songId: string,
+  userId: string,
+): Promise<SongParticipant> {
+  const participant: SongParticipant = {
+    id: `${songId}_${userId}`,
+    songId,
+    userId,
+  }
+  await setDoc(doc(db(), 'participants', participant.id), participant)
+  return participant
+}
+
+export async function fbRemoveSongParticipant(participantId: string): Promise<void> {
+  await deleteDoc(doc(db(), 'participants', participantId))
 }
 
 export async function fbUpdateStanza(
@@ -686,13 +816,14 @@ export function watchSongData(
     }
     inFlight = true
     try {
-      const [stz, slt, prp, vot, ses, aud] = await Promise.all([
+      const [stz, slt, prp, vot, ses, aud, prt] = await Promise.all([
         getDocs(query(collection(db(), 'stanzas'), where('songId', '==', songId))),
         getDocs(query(collection(db(), 'slots'), where('songId', '==', songId))),
         getDocs(query(collection(db(), 'proposals'), where('songId', '==', songId))),
         getDocs(query(collection(db(), 'votes'), where('songId', '==', songId))),
         getDocs(query(collection(db(), 'sessions'), where('songId', '==', songId))),
         getDocs(query(collection(db(), 'audioTakes'), where('songId', '==', songId))),
+        getDocs(query(collection(db(), 'participants'), where('songId', '==', songId))),
       ])
       onData({
         stanzas: stz.docs.map((d) => {
@@ -716,6 +847,10 @@ export function watchSongData(
           const data = d.data() as Omit<AudioTake, 'id'> & { songId?: string }
           return { ...data, id: d.id }
         }),
+        participants: prt.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<SongParticipant, 'id'>),
+        })),
       })
     } finally {
       inFlight = false
@@ -734,7 +869,15 @@ export function watchSongData(
     }, 80)
   }
 
-  for (const name of ['stanzas', 'slots', 'proposals', 'votes', 'sessions', 'audioTakes'] as const) {
+  for (const name of [
+    'stanzas',
+    'slots',
+    'proposals',
+    'votes',
+    'sessions',
+    'audioTakes',
+    'participants',
+  ] as const) {
     unsubs.push(
       onSnapshot(query(collection(db(), name), where('songId', '==', songId)), () => {
         schedule()

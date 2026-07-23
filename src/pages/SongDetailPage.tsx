@@ -7,6 +7,7 @@ import { Sheet } from '@/components/Sheet'
 import { buildColoredSegments } from '@/lib/diff'
 import {
   acceptProposal,
+  addSongParticipant,
   appendVerse,
   canAccessSong,
   castVote,
@@ -16,6 +17,7 @@ import {
   joinSongSession,
   mergeSongRemote,
   proposeVerse,
+  removeSongParticipant,
   startNextStanza,
   updateSong,
   updateStanzaTitle,
@@ -26,6 +28,7 @@ import { watchSongData } from '@/data/firebaseRepo'
 import { useBrainStore } from '@/data/useBrainStore'
 import { stanzaLabel } from '@/lib/stanza'
 import { orderProposalThread } from '@/lib/proposalThread'
+import { isNativePlatform } from '@/lib/platform'
 import type { SongVisibility, VerseProposal } from '@/types/domain'
 
 export function SongDetailPage() {
@@ -48,12 +51,19 @@ export function SongDetailPage() {
   const [visibility, setVisibility] = useState<SongVisibility>(
     song?.visibility ?? 'public_in_group',
   )
+  const [editError, setEditError] = useState('')
   const [draft, setDraft] = useState('')
   const [sessionColor, setSessionColor] = useState('#E8A838')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [composeStanzaId, setComposeStanzaId] = useState<string | null>(null)
   const draftInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!song) return
+    setTitle(song.title)
+    setVisibility(song.visibility)
+  }, [song?.id, song?.title, song?.visibility])
 
   useEffect(() => {
     if (!song || !canAccessSong(songId, profile.id)) return
@@ -109,6 +119,14 @@ export function SongDetailPage() {
       .filter((block) => block.lines.length > 0)
   }, [stanzas, state.slots, state.proposals])
 
+  useEffect(() => {
+    if (composed.length > 0) return
+    // Autofocus composer on first verse — skip on native to avoid keyboard/scroll jumps
+    if (isNativePlatform()) return
+    const id = window.setTimeout(() => draftInputRef.current?.focus(), 120)
+    return () => window.clearTimeout(id)
+  }, [composed.length, songId])
+
   const openStanza = stanzas[stanzas.length - 1]
 
   useEffect(() => {
@@ -145,7 +163,8 @@ export function SongDetailPage() {
   const canStartNext = openLineCount > 0
   const isCreator = song?.createdBy === profile.id
   const admin = song ? isGroupAdmin(song.groupId, profile.id) : false
-  const canRenameStanza = Boolean(song && (admin || song.createdBy === profile.id))
+  const canEditSong = Boolean(song && (isCreator || admin))
+  const canRenameStanza = canEditSong
 
   if (!song || !canAccessSong(songId, profile.id)) {
     return (
@@ -155,14 +174,53 @@ export function SongDetailPage() {
     )
   }
 
+  const currentSong = song
+
   const online = state.sessions.filter(
     (s) => s.songId === songId && Date.now() - new Date(s.lastSeenAt).getTime() < 5 * 60_000,
   )
+  const songParticipants = state.participants.filter((p) => p.songId === songId)
+  const participantIds = new Set(songParticipants.map((p) => p.userId))
+  // Creator always counts as participant for private songs
+  participantIds.add(currentSong.createdBy)
+  const groupMembers = state.members.filter((m) => m.groupId === groupId)
+  const inviteCandidates = groupMembers.filter((m) => !participantIds.has(m.userId))
+  const canManageParticipants = isCreator || admin
 
   async function onSave(e: FormEvent) {
     e.preventDefault()
-    await updateSong(songId, { title, visibility })
-    setShowEdit(false)
+    setEditError('')
+    try {
+      await updateSong(songId, { title: title.trim(), visibility })
+      setShowEdit(false)
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Erro ao salvar')
+    }
+  }
+
+  async function ensurePrivate(): Promise<void> {
+    if (currentSong.visibility === 'private') return
+    await updateSong(songId, { title: title.trim(), visibility: 'private' })
+    setVisibility('private')
+  }
+
+  async function onInvite(userId: string) {
+    setEditError('')
+    try {
+      await ensurePrivate()
+      await addSongParticipant(songId, userId)
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Erro ao convidar')
+    }
+  }
+
+  async function onUninvite(userId: string) {
+    setEditError('')
+    try {
+      await removeSongParticipant(songId, userId)
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Erro ao remover')
+    }
   }
 
   function startRename(stanzaId: string, currentTitle: string | undefined) {
@@ -283,19 +341,23 @@ export function SongDetailPage() {
       title={song.title}
       backTo={`/groups/${groupId}`}
       action={
-        admin || song.createdBy === profile.id ? (
+        canEditSong ? (
           <button
             type="button"
-            className="btn icon"
-            onClick={() => setShowEdit(true)}
-            aria-label="Editar música"
+            className="btn secondary compact"
+            onClick={() => {
+              setEditError('')
+              setTitle(song.title)
+              setVisibility(song.visibility)
+              setShowEdit(true)
+            }}
           >
-            ···
+            Editar
           </button>
         ) : undefined
       }
       footer={
-        <form className="composer docked stack" onSubmit={onSend}>
+        <form className="composer docked stack" data-tour="song-composer" onSubmit={onSend}>
           {error && <div className="error">{error}</div>}
           <div className="row spread">
             <div className="composer-target">
@@ -339,8 +401,14 @@ export function SongDetailPage() {
               ref={draftInputRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Digite um verso…"
+              placeholder={
+                composed.length === 0 ? 'Escreva o primeiro verso…' : 'Digite um verso…'
+              }
               aria-label="Novo verso"
+              autoCapitalize="sentences"
+              autoComplete="off"
+              spellCheck
+              enterKeyHint="send"
               disabled={busy}
             />
             <button type="submit" className="btn" disabled={busy || !draft.trim()}>
@@ -369,7 +437,12 @@ export function SongDetailPage() {
 
       <div className="list">
         {composed.length === 0 && (
-          <div className="empty">Comece a escrever o primeiro verso.</div>
+          <div className="activation-empty compact first-verse-empty">
+            <h2 className="section-title">Primeiro verso</h2>
+            <p className="muted">
+              Digite abaixo e envie — é o começo da música.
+            </p>
+          </div>
         )}
         {composed.map(({ stanza, lines }) => {
           const selected = selectedStanzaId === stanza.id
@@ -388,6 +461,9 @@ export function SongDetailPage() {
                       value={renameDraft}
                       placeholder={stanzaLabel({ index: stanza.index })}
                       autoFocus
+                      autoComplete="off"
+                      autoCapitalize="sentences"
+                      enterKeyHint="done"
                       aria-label="Nome da estrofe"
                       onChange={(e) => setRenameDraft(e.target.value)}
                       onBlur={() => {
@@ -634,6 +710,10 @@ export function SongDetailPage() {
               }}
               required
               placeholder="Escreva o verso…"
+              autoCapitalize="sentences"
+              autoComplete="off"
+              spellCheck
+              enterKeyHint="done"
             />
             {forkSameAsBase && (
               <p className="muted text-xs" style={{ color: 'var(--danger-text)' }}>
@@ -657,9 +737,19 @@ export function SongDetailPage() {
 
       <Sheet open={showEdit} title="Editar música" onClose={() => setShowEdit(false)}>
         <form className="stack" onSubmit={onSave}>
+          {editError && <div className="error">{editError}</div>}
           <div className="field">
             <label htmlFor="title">Título</label>
-            <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+            <input
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              autoComplete="off"
+              autoCapitalize="sentences"
+              enterKeyHint="next"
+              placeholder="Título da música"
+              required
+            />
           </div>
           <div className="field">
             <label htmlFor="vis">Visibilidade</label>
@@ -669,23 +759,100 @@ export function SongDetailPage() {
               onChange={(e) => setVisibility(e.target.value as SongVisibility)}
             >
               <option value="public_in_group">Pública no grupo</option>
-              <option value="private">Privada</option>
+              <option value="private">Privada (só convidados)</option>
             </select>
           </div>
-          <button type="submit" className="btn block">
-            Salvar
-          </button>
-          <button
-            type="button"
-            className="btn danger block"
-            onClick={() => {
-              if (confirm('Excluir música?')) {
-                void deleteSong(songId).then(() => navigate(`/groups/${groupId}`))
-              }
-            }}
-          >
-            Excluir música
-          </button>
+
+          {visibility === 'private' && canManageParticipants && (
+            <div className="edit-access">
+              <p className="muted text-xs">
+                Só convidados veem e editam esta música.
+              </p>
+
+              <div className="person-list">
+                {[...participantIds].map((userId) => {
+                  const p = state.profiles.find((x) => x.id === userId)
+                  const member = groupMembers.find((m) => m.userId === userId)
+                  const isOwner = userId === song.createdBy
+                  return (
+                    <div key={userId} className="person-row">
+                      <span
+                        className="dot"
+                        style={{ background: member?.color ?? 'var(--ink-muted)' }}
+                        aria-hidden="true"
+                      />
+                      <div className="person-meta">
+                        <span className="person-name">{p?.name ?? '—'}</span>
+                        {p?.email && <span className="person-sub">{p.email}</span>}
+                      </div>
+                      {isOwner ? (
+                        <span className="badge accent">Dono</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="person-action danger"
+                          onClick={() => void onUninvite(userId)}
+                        >
+                          Remover
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {inviteCandidates.length > 0 ? (
+                <div className="edit-access-invite">
+                  <p className="section-label">Convidar do grupo</p>
+                  <div className="person-list">
+                    {inviteCandidates.map((m) => {
+                      const p = state.profiles.find((x) => x.id === m.userId)
+                      return (
+                        <div key={m.id} className="person-row">
+                          <span
+                            className="dot"
+                            style={{ background: m.color }}
+                            aria-hidden="true"
+                          />
+                          <div className="person-meta">
+                            <span className="person-name">{p?.name ?? '—'}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="person-action"
+                            onClick={() => void onInvite(m.userId)}
+                          >
+                            Convidar
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <p className="muted text-xs">Todos do grupo já foram convidados.</p>
+              )}
+            </div>
+          )}
+
+          <div className="edit-actions">
+            <button type="submit" className="btn block">
+              Salvar
+            </button>
+            {isCreator && (
+              <button
+                type="button"
+                className="danger-link"
+                onClick={() => {
+                  if (confirm('Excluir música?')) {
+                    void deleteSong(songId).then(() => navigate(`/groups/${groupId}`))
+                  }
+                }}
+              >
+                Excluir música
+              </button>
+            )}
+          </div>
         </form>
       </Sheet>
     </Page>

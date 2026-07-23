@@ -25,7 +25,7 @@ export function LoginPage() {
   }
 
   return (
-    <Page title="Entrar" backTo="/welcome" narrow>
+    <Page title="Entrar" backTo="/welcome" narrow centerContent>
       <form className="stack" onSubmit={onSubmit}>
         {error && <div className="error">{error}</div>}
         <div className="field">
@@ -34,6 +34,9 @@ export function LoginPage() {
             id="email"
             type="email"
             autoComplete="email"
+            inputMode="email"
+            enterKeyHint="next"
+            placeholder="nome@email.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -46,6 +49,8 @@ export function LoginPage() {
             id="password"
             type="password"
             autoComplete="current-password"
+            enterKeyHint="done"
+            placeholder="Sua senha"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required

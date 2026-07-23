@@ -13,6 +13,7 @@ export function Page({
   brandTitle = false,
   narrow = false,
   wide = false,
+  centerContent = false,
 }: {
   title?: string
   backTo?: string
@@ -27,6 +28,8 @@ export function Page({
   brandTitle?: boolean
   narrow?: boolean
   wide?: boolean
+  /** Vertically center page body under the header */
+  centerContent?: boolean
 }) {
   const shellClass = [
     'app-shell',
@@ -65,7 +68,7 @@ export function Page({
             {action}
           </header>
         )}
-        {children}
+        {centerContent ? <div className="page-center">{children}</div> : children}
       </div>
       {footer}
       {showNav && <BottomNav />}

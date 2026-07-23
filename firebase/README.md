@@ -1,4 +1,4 @@
-# Firebase — Brain
+# Firebase — Collabrain
 
 Substitua as variáveis em `.env` (veja `.env.example`) com o config do console Firebase
 (Project settings → Your apps → Web).
