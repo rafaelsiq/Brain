@@ -1258,16 +1258,6 @@ html[data-theme='dark'] .list-toolbar .toolbar-tag {
   text-align: center;
 }
 
-.invite-nudge {
-  gap: 12px;
-  padding: 12px 14px;
-  margin-bottom: 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
-  align-items: center;
-}
-
 .install-banner {
   display: flex;
   flex-wrap: wrap;

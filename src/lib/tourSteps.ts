@@ -56,10 +56,9 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'group-invite',
-    anchor: 'group-invite',
-    fallbackAnchors: ['group-settings'],
+    anchor: 'group-settings',
     title: 'Convide alguém',
-    body: 'Copie o link de convite (ou abra Configurar) para chamar outras pessoas.',
+    body: 'Abra Configurar para copiar o link de convite e chamar outras pessoas.',
     missingBody: 'Em Configurar você copia o link de convite do grupo.',
     matchesLocation: (pathname) => /^\/groups\/[^/]+$/.test(pathname),
     isReady: (ctx) => ctx.groupCount > 0,

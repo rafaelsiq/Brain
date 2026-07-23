@@ -315,23 +315,6 @@ export function GroupDetailPage() {
                 </button>
               </div>
             )}
-            {songs.length > 0 && admin && (
-              <div className="invite-nudge row spread" data-tour="group-invite">
-                <div>
-                  <p className="muted" style={{ margin: 0 }}>
-                    Convide alguém para compor junto
-                  </p>
-                  <strong className="invite-code">{group.inviteCode}</strong>
-                </div>
-                <button
-                  type="button"
-                  className="btn secondary compact"
-                  onClick={() => void onCopyInvite()}
-                >
-                  {inviteCopied ? 'Link copiado' : 'Copiar link'}
-                </button>
-              </div>
-            )}
             {songs.length > 0 && visibleSongs.length === 0 && (
               <div className="empty">Nenhuma música corresponde aos filtros.</div>
             )}
