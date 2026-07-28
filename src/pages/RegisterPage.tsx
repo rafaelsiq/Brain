@@ -1,7 +1,9 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Page } from '@/components/Page'
 import { register } from '@/data/store'
+
+const ERROR_TIMEOUT_MS = 4000
 
 export function RegisterPage() {
   const navigate = useNavigate()
@@ -9,6 +11,12 @@ export function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!error) return
+    const timer = window.setTimeout(() => setError(''), ERROR_TIMEOUT_MS)
+    return () => window.clearTimeout(timer)
+  }, [error])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
