@@ -720,7 +720,7 @@ html[data-theme='dark'] .list-toolbar .toolbar-tag {
   height: 100%;
   border-radius: inherit;
   background: var(--danger);
-  transform-origin: right center;
+  transform-origin: left center;
   animation-name: errorCountdownRtl;
   animation-timing-function: linear;
   animation-fill-mode: forwards;
