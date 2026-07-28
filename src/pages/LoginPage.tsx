@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { ErrorPopup } from '@/components/ErrorPopup'
 import { Page } from '@/components/Page'
 import { login } from '@/data/store'
 
@@ -34,18 +35,8 @@ export function LoginPage() {
 
   return (
     <Page title="Entrar" backTo="/welcome" narrow centerContent>
+      <ErrorPopup message={error} durationMs={ERROR_TIMEOUT_MS} />
       <form className="stack" onSubmit={onSubmit}>
-        {error && (
-          <div className="error" role="alert">
-            <span>{error}</span>
-            <span className="error-progress-track" aria-hidden>
-              <span
-                className="error-progress"
-                style={{ animationDuration: `${ERROR_TIMEOUT_MS}ms` }}
-              />
-            </span>
-          </div>
-        )}
         <div className="field">
           <label htmlFor="email">E-mail</label>
           <input
