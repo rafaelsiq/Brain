@@ -32,7 +32,17 @@ export function RegisterPage() {
   return (
     <Page title="Criar conta" backTo="/welcome" narrow centerContent>
       <form className="stack" onSubmit={onSubmit}>
-        {error && <div className="error">{error}</div>}
+        {error && (
+          <div className="error" role="alert">
+            <span>{error}</span>
+            <span className="error-progress-track" aria-hidden>
+              <span
+                className="error-progress"
+                style={{ animationDuration: `${ERROR_TIMEOUT_MS}ms` }}
+              />
+            </span>
+          </div>
+        )}
         <div className="field">
           <label htmlFor="name">Nome</label>
           <input

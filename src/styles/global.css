@@ -701,6 +701,38 @@ html[data-theme='dark'] .list-toolbar .toolbar-tag {
   border-radius: var(--radius-sm);
   padding: 0.75rem 0.9rem;
   font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.error-progress-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  overflow: hidden;
+}
+
+.error-progress {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--danger);
+  transform-origin: right center;
+  animation-name: errorCountdownRtl;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes errorCountdownRtl {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
 }
 
 .dot {
