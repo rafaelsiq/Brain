@@ -283,10 +283,7 @@ export async function logout(): Promise<void> {
   setState({ currentUserId: null })
 }
 
-export async function requestPasswordReset(input: {
-  email: string
-  newPassword?: string
-}): Promise<void> {
+export async function requestPasswordReset(input: { email: string }): Promise<void> {
   const email = input.email.trim().toLowerCase()
   if (!email) throw new Error('Informe um e-mail válido')
 
@@ -295,18 +292,9 @@ export async function requestPasswordReset(input: {
     return
   }
 
-  const account = state.accounts.find((acc) => acc.email === email)
-  if (!account) {
-    throw new Error('Conta não encontrada para este e-mail')
-  }
-  if (!input.newPassword || input.newPassword.length < 4) {
-    throw new Error('A nova senha deve ter pelo menos 4 caracteres')
-  }
-  setState({
-    accounts: state.accounts.map((acc) =>
-      acc.id === account.id ? { ...acc, password: input.newPassword! } : acc,
-    ),
-  })
+  throw new Error(
+    'Recuperação de senha segura requer backend de autenticação (Firebase Auth) configurado.',
+  )
 }
 
 export async function updateProfile(

@@ -765,6 +765,15 @@ html[data-theme='dark'] .list-toolbar .toolbar-tag {
   font-size: 0.9rem;
 }
 
+.notice {
+  color: color-mix(in srgb, var(--warn) 86%, var(--ink));
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.9rem;
+  font-size: 0.9rem;
+}
+
 .dot {
   width: 9px;
   height: 9px;

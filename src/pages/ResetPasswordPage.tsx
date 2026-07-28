@@ -8,8 +8,6 @@ const FEEDBACK_TIMEOUT_MS = 4500
 
 export function ResetPasswordPage() {
   const [email, setEmail] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -32,22 +30,8 @@ export function ResetPasswordPage() {
     setSuccess('')
     setSubmitting(true)
     try {
-      if (!usingFirebase && newPassword !== confirmPassword) {
-        throw new Error('A confirmação de senha não confere')
-      }
-      await requestPasswordReset({
-        email,
-        newPassword: usingFirebase ? undefined : newPassword,
-      })
-      setSuccess(
-        usingFirebase
-          ? 'Se o e-mail existir, enviamos um link para redefinir a senha.'
-          : 'Senha redefinida com sucesso. Você já pode entrar com a nova senha.',
-      )
-      if (!usingFirebase) {
-        setNewPassword('')
-        setConfirmPassword('')
-      }
+      await requestPasswordReset({ email })
+      setSuccess('Se o e-mail existir, enviamos um link para redefinir a senha.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível redefinir a senha')
     } finally {
@@ -60,6 +44,12 @@ export function ResetPasswordPage() {
       <ErrorPopup message={error} durationMs={FEEDBACK_TIMEOUT_MS} />
       <form className="stack" onSubmit={onSubmit}>
         {success && <div className="success">{success}</div>}
+        {!usingFirebase && (
+          <div className="notice">
+            Para segurança, a redefinição exige envio de link por e-mail. Configure o Firebase
+            Auth para habilitar este fluxo.
+          </div>
+        )}
         <div className="field">
           <label htmlFor="reset-email">E-mail</label>
           <input
@@ -75,45 +65,8 @@ export function ResetPasswordPage() {
           />
         </div>
 
-        {!usingFirebase && (
-          <>
-            <div className="field">
-              <label htmlFor="new-password">Nova senha</label>
-              <input
-                id="new-password"
-                type="password"
-                autoComplete="new-password"
-                minLength={4}
-                placeholder="Mínimo 4 caracteres"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
-                disabled={submitting}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="confirm-password">Confirmar nova senha</label>
-              <input
-                id="confirm-password"
-                type="password"
-                autoComplete="new-password"
-                minLength={4}
-                placeholder="Repita a nova senha"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                disabled={submitting}
-              />
-            </div>
-          </>
-        )}
-
-        <button type="submit" className="btn block" disabled={submitting}>
-          {submitting
-            ? 'Enviando…'
-            : usingFirebase
-              ? 'Enviar link de redefinição'
-              : 'Redefinir senha'}
+        <button type="submit" className="btn block" disabled={submitting || !usingFirebase}>
+          {submitting ? 'Enviando…' : 'Enviar link de redefinição'}
         </button>
         <p className="muted" style={{ textAlign: 'center' }}>
           Lembrou a senha? <Link to="/login">Voltar para entrar</Link>
