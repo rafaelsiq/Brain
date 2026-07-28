@@ -70,6 +70,9 @@ export function LoginPage() {
           {submitting ? 'Entrando…' : 'Entrar'}
         </button>
         <p className="muted" style={{ textAlign: 'center' }}>
+          <Link to="/reset-password">Esqueci minha senha</Link>
+        </p>
+        <p className="muted" style={{ textAlign: 'center' }}>
           Não tem conta? <Link to="/register">Cadastre-se</Link>
         </p>
       </form>

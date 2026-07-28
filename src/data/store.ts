@@ -28,6 +28,7 @@ import {
   fbLogin,
   fbLogout,
   fbProposeVerse,
+  fbRequestPasswordReset,
   fbRegister,
   fbRemoveMember,
   fbRemoveSongParticipant,
@@ -280,6 +281,32 @@ export async function logout(): Promise<void> {
     return
   }
   setState({ currentUserId: null })
+}
+
+export async function requestPasswordReset(input: {
+  email: string
+  newPassword?: string
+}): Promise<void> {
+  const email = input.email.trim().toLowerCase()
+  if (!email) throw new Error('Informe um e-mail válido')
+
+  if (usingFirebase) {
+    await fbRequestPasswordReset(email)
+    return
+  }
+
+  const account = state.accounts.find((acc) => acc.email === email)
+  if (!account) {
+    throw new Error('Conta não encontrada para este e-mail')
+  }
+  if (!input.newPassword || input.newPassword.length < 4) {
+    throw new Error('A nova senha deve ter pelo menos 4 caracteres')
+  }
+  setState({
+    accounts: state.accounts.map((acc) =>
+      acc.id === account.id ? { ...acc, password: input.newPassword! } : acc,
+    ),
+  })
 }
 
 export async function updateProfile(

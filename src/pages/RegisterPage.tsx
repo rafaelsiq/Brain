@@ -83,6 +83,9 @@ export function RegisterPage() {
           Cadastrar
         </button>
         <p className="muted" style={{ textAlign: 'center' }}>
+          <Link to="/reset-password">Esqueci minha senha</Link>
+        </p>
+        <p className="muted" style={{ textAlign: 'center' }}>
           Já tem conta? <Link to="/login">Entrar</Link>
         </p>
       </form>

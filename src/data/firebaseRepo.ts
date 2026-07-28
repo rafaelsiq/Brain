@@ -4,6 +4,7 @@ import {
   deleteUser,
   onAuthStateChanged,
   reauthenticateWithCredential,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   updatePassword,
@@ -129,6 +130,25 @@ export async function fbLogin(email: string, password: string): Promise<Profile>
 
 export async function fbLogout(): Promise<void> {
   await signOut(auth())
+}
+
+export async function fbRequestPasswordReset(email: string): Promise<void> {
+  const normalizedEmail = email.trim().toLowerCase()
+  try {
+    await sendPasswordResetEmail(auth(), normalizedEmail)
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
+    if (code === 'auth/user-not-found') {
+      return
+    }
+    if (code === 'auth/invalid-email' || code === 'auth/missing-email') {
+      throw new Error('Informe um e-mail válido')
+    }
+    if (code === 'auth/too-many-requests') {
+      throw new Error('Muitas tentativas. Tente novamente em instantes.')
+    }
+    throw err instanceof Error ? err : new Error('Não foi possível enviar o e-mail de redefinição')
+  }
 }
 
 export async function fbUpdateProfile(

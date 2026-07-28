@@ -13,6 +13,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { RecordStanzaPage } from '@/pages/RecordStanzaPage'
 import { RegisterPage } from '@/pages/RegisterPage'
+import { ResetPasswordPage } from '@/pages/ResetPasswordPage'
 import { SongDetailPage } from '@/pages/SongDetailPage'
 import { SongEditorPage } from '@/pages/SongEditorPage'
 import { WelcomePage } from '@/pages/WelcomePage'
@@ -29,6 +30,7 @@ function AppRoutes() {
             <Route path="/welcome" element={<WelcomePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
           </Route>
 
           <Route path="/join/:code" element={<JoinPage />} />
