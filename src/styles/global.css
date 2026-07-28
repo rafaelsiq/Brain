@@ -708,16 +708,23 @@ html[data-theme='dark'] .list-toolbar .toolbar-tag {
 
 .error-popup {
   position: fixed;
-  top: calc(var(--safe-top) + 12px);
+  top: calc(var(--safe-top) + var(--header-h) + 18px);
   left: 50%;
   transform: translateX(-50%);
-  width: min(calc(100% - 24px), 420px);
+  width: min(calc(100% - 32px), calc(var(--shell-max) - 24px));
   z-index: 220;
   pointer-events: none;
 }
 
 .error-popup-card {
   box-shadow: var(--shadow-lift);
+}
+
+@media (min-width: 900px) {
+  .error-popup {
+    top: calc(var(--safe-top) + var(--header-h) + 28px);
+    width: min(calc(100% - 48px), 520px);
+  }
 }
 
 .error-progress-track {
